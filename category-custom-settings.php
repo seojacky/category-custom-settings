@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Служебный: Category Custom Settings
  * Description: Adds custom settings fields for WordPress categories and provides helper functions for frontend output.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: @big_jacky
  * Author URI: https://t.me/big_jacky
  * Plugin URI: https://github.com/seojacky/category-custom-settings
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 
 final class Category_Custom_Settings_Plugin {
 
-	const VERSION      = '1.1.0';
+	const VERSION      = '1.2.0';
 	const NONCE_ACTION = 'ccs_save_category_fields';
 	const NONCE_NAME   = 'ccs_category_fields_nonce';
 

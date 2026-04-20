@@ -3,7 +3,7 @@ Contributors: seojacky
 Tags: category, custom fields, term meta, taxonomy
 Requires at least: 5.6
 Tested up to: 6.7
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -56,6 +56,14 @@ Use `ccs_get_category_field( 'field_name' )` to retrieve the value, or `ccs_the_
 `cat_adsense1` and `cat_headerbanner` are restricted to users who have the `unfiltered_html` capability (administrators on single-site installations). The values are stored and output through `wp_kses()` with an extended allowlist that includes `<script>`, `<iframe>`, and `<ins>` tags.
 
 == Changelog ==
+
+= 1.2.0 =
+* Fixed PHPCS: output of code/banner fields now uses `wp_kses()` with an explicit allowlist instead of bare `echo`.
+* Fixed PHPCS: added inline ignore comment for `$_POST['ccs_fields']` array assignment; sanitisation is done per-field in the loop.
+* Fixed PHPCS: pass plugin version to `wp_register_style()` to prevent browser caching issues.
+* Removed legacy migration code (`maybe_migrate_legacy_data`, `LEGACY_OPTION_PREFIX`, legacy fallback in `ccs_get_category_field`).
+* Extracted `ccs_get_code_allowed_html()` as a shared public function.
+* Added `readme.txt` for WordPress plugin directory compliance.
 
 = 1.1.0 =
 * Refactored to use `term_meta` for all field storage.
