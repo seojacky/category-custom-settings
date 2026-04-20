@@ -1,12 +1,14 @@
 <?php
 /**
- * Plugin Name: Category Custom Settings
- * Plugin URI: https://example.com/
+ * Plugin Name: Category Custom Settings 
  * Description: Adds custom settings fields for WordPress categories, supports legacy migration from old category options, and provides helper functions for frontend output.
  * Version: 1.1.0
- * Author: OpenAI
- * License: GPL2+
- * Text Domain: category-custom-settings
+ * Author: @big_jacky
+ * Author URI: https://t.me/big_jacky
+ * Plugin URI: https://github.com/seojacky/category-custom-settings
+ * GitHub Plugin URI: https://github.com/seojacky/category-custom-settings
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
 if (!defined('ABSPATH')) {
