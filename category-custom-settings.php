@@ -2,13 +2,14 @@
 /**
  * Plugin Name: Служебный: Category Custom Settings
  * Description: Adds custom settings fields for WordPress categories and provides helper functions for frontend output.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: @big_jacky
  * Author URI: https://t.me/big_jacky
  * Plugin URI: https://github.com/seojacky/category-custom-settings
  * GitHub Plugin URI: https://github.com/seojacky/category-custom-settings
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: category-custom-settings
  */
 
 if (!defined('ABSPATH')) {
@@ -17,7 +18,7 @@ if (!defined('ABSPATH')) {
 
 final class Category_Custom_Settings_Plugin {
 
-	const VERSION      = '1.2.0';
+	const VERSION      = '1.3.0';
 	const NONCE_ACTION = 'ccs_save_category_fields';
 	const NONCE_NAME   = 'ccs_category_fields_nonce';
 
@@ -27,7 +28,11 @@ final class Category_Custom_Settings_Plugin {
 	 * @return array
 	 */
 	private function get_fields_config() {
-		return array(
+		static $config = null;
+		if ($config !== null) {
+			return $config;
+		}
+		$config = array(
 			'cat_add_description' => array(
 				'type'              => 'html_limited',
 				'allowed_for_child' => true,
@@ -65,12 +70,22 @@ final class Category_Custom_Settings_Plugin {
 				'allowed_for_child' => false,
 			),
 		);
+		return $config;
 	}
 
 	public function __construct() {
+		add_action('init', array($this, 'load_textdomain'));
 		add_action('category_edit_form_fields', array($this, 'render_edit_fields'));
 		add_action('edited_category', array($this, 'save_fields'));
 		add_action('admin_enqueue_scripts', array($this, 'admin_assets'));
+	}
+
+	public function load_textdomain() {
+		load_plugin_textdomain(
+			'category-custom-settings',
+			false,
+			dirname(plugin_basename(__FILE__)) . '/languages'
+		);
 	}
 
 	public function admin_assets($hook_suffix) {
@@ -160,6 +175,9 @@ final class Category_Custom_Settings_Plugin {
 
 		wp_nonce_field(self::NONCE_ACTION, self::NONCE_NAME);
 
+		// Prime the term meta cache with a single query; subsequent calls use the cache.
+		get_term_meta($term_id);
+
 		$cat_add_description = get_term_meta($term_id, 'cat_add_description', true);
 		$cat_version         = get_term_meta($term_id, 'cat_version', true);
 		$cat_video           = get_term_meta($term_id, 'cat_video', true);
@@ -171,8 +189,8 @@ final class Category_Custom_Settings_Plugin {
 		$cat_headerbanner    = get_term_meta($term_id, 'cat_headerbanner', true);
 		?>
 		<tr class="form-field ccs-row-add-description">
-			<th scope="row" valign="top">
-				<label for="ccs_cat_add_description">Дополнительное описание под листингом</label>
+			<th scope="row">
+				<label for="ccs_cat_add_description"><?php esc_html_e('Дополнительное описание под листингом', 'category-custom-settings'); ?></label>
 			</th>
 			<td>
 				<textarea class="ccs-textarea-large" name="ccs_fields[cat_add_description]" id="ccs_cat_add_description"><?php echo esc_textarea($cat_add_description); ?></textarea>
@@ -181,15 +199,15 @@ final class Category_Custom_Settings_Plugin {
 
 		<?php if ($is_parent) : ?>
 			<tr>
-				<th class="ccs-field-heading" scope="row" valign="top"></th>
+				<th class="ccs-field-heading" scope="row"></th>
 				<td class="ccs-field-heading">
-					<p class="ccs-admin-note">Поля для главных категорий</p>
+					<p class="ccs-admin-note"><?php esc_html_e('Поля для главных категорий', 'category-custom-settings'); ?></p>
 				</td>
 			</tr>
 
 			<tr class="form-field ccs-row-version">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_version">Версия игры</label>
+				<th scope="row">
+					<label for="ccs_cat_version"><?php esc_html_e('Версия игры', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<input class="ccs-input-text" type="text" name="ccs_fields[cat_version]" id="ccs_cat_version" value="<?php echo esc_attr($cat_version); ?>" />
@@ -197,8 +215,11 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr class="form-field ccs-row-video">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_video">ID Видео "в тему" <br>(пример: a--RlPV3ZBo)</label>
+				<th scope="row">
+					<label for="ccs_cat_video">
+						<?php esc_html_e('ID Видео "в тему"', 'category-custom-settings'); ?><br>
+						<?php esc_html_e('(пример: a--RlPV3ZBo)', 'category-custom-settings'); ?>
+					</label>
 				</th>
 				<td>
 					<input class="ccs-input-text" type="text" name="ccs_fields[cat_video]" id="ccs_cat_video" value="<?php echo esc_attr($cat_video); ?>" />
@@ -206,15 +227,15 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr>
-				<th class="ccs-field-heading" scope="row" valign="top"></th>
+				<th class="ccs-field-heading" scope="row"></th>
 				<td class="ccs-field-heading">
-					<p class="ccs-admin-note">Поля для администратора</p>
+					<p class="ccs-admin-note"><?php esc_html_e('Поля для администратора', 'category-custom-settings'); ?></p>
 				</td>
 			</tr>
 
 			<tr class="form-field ccs-row-bg-category">
-				<th scope="row" valign="top">
-					<label for="ccs_bg_category">Цвет фона категорий (нужен спец плагин)</label>
+				<th scope="row">
+					<label for="ccs_bg_category"><?php esc_html_e('Цвет фона категорий (нужен спец плагин)', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<input class="ccs-input-text" type="text" name="ccs_fields[bg_category]" id="ccs_bg_category" value="<?php echo esc_attr($bg_category); ?>" />
@@ -222,8 +243,8 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr class="form-field ccs-row-rss">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_rss">RSS новостей</label>
+				<th scope="row">
+					<label for="ccs_cat_rss"><?php esc_html_e('RSS новостей', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<input class="ccs-input-text" type="url" name="ccs_fields[cat_rss]" id="ccs_cat_rss" value="<?php echo esc_attr($cat_rss); ?>" />
@@ -231,8 +252,8 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr class="form-field ccs-row-leftlink">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_leftlink">Ссылка слева</label>
+				<th scope="row">
+					<label for="ccs_cat_leftlink"><?php esc_html_e('Ссылка слева', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<input class="ccs-input-text" type="url" name="ccs_fields[cat_leftlink]" id="ccs_cat_leftlink" value="<?php echo esc_attr($cat_leftlink); ?>" />
@@ -240,8 +261,8 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr class="form-field ccs-row-rightlink">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_rightlink">Ссылка справа</label>
+				<th scope="row">
+					<label for="ccs_cat_rightlink"><?php esc_html_e('Ссылка справа', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<input class="ccs-input-text" type="url" name="ccs_fields[cat_rightlink]" id="ccs_cat_rightlink" value="<?php echo esc_attr($cat_rightlink); ?>" />
@@ -249,8 +270,8 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr class="form-field ccs-row-adsense1">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_adsense1">Код Adsense 1</label>
+				<th scope="row">
+					<label for="ccs_cat_adsense1"><?php esc_html_e('Код Adsense 1', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<textarea class="ccs-textarea-medium" name="ccs_fields[cat_adsense1]" id="ccs_cat_adsense1"><?php echo esc_textarea($cat_adsense1); ?></textarea>
@@ -258,8 +279,8 @@ final class Category_Custom_Settings_Plugin {
 			</tr>
 
 			<tr class="form-field ccs-row-headerbanner">
-				<th scope="row" valign="top">
-					<label for="ccs_cat_headerbanner">HTML код баннера в шапке</label>
+				<th scope="row">
+					<label for="ccs_cat_headerbanner"><?php esc_html_e('HTML код баннера в шапке', 'category-custom-settings'); ?></label>
 				</th>
 				<td>
 					<textarea class="ccs-textarea-medium" name="ccs_fields[cat_headerbanner]" id="ccs_cat_headerbanner"><?php echo esc_textarea($cat_headerbanner); ?></textarea>
@@ -297,8 +318,8 @@ final class Category_Custom_Settings_Plugin {
 
 		$is_parent = ((int) $term->parent === 0);
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each field is sanitized individually via sanitize_field_value() below.
-		$raw       = wp_unslash($_POST['ccs_fields']);
-		$fields    = $this->get_fields_config();
+		$raw    = wp_unslash($_POST['ccs_fields']);
+		$fields = $this->get_fields_config();
 
 		foreach ($fields as $meta_key => $config) {
 			if (!$is_parent && empty($config['allowed_for_child'])) {
@@ -359,7 +380,9 @@ final class Category_Custom_Settings_Plugin {
 	}
 }
 
-new Category_Custom_Settings_Plugin();
+add_action('plugins_loaded', function () {
+	new Category_Custom_Settings_Plugin();
+});
 
 /**
  * Returns the allowed HTML tags and attributes for code/banner fields.
@@ -367,6 +390,11 @@ new Category_Custom_Settings_Plugin();
  * @return array
  */
 function ccs_get_code_allowed_html() {
+	static $allowed_html = null;
+	if ($allowed_html !== null) {
+		return $allowed_html;
+	}
+
 	$allowed_html = wp_kses_allowed_html('post');
 
 	$allowed_html['ins'] = array(
@@ -475,11 +503,7 @@ function ccs_the_category_field($field_name, $term_id = null) {
 
 		case 'cat_adsense1':
 		case 'cat_headerbanner':
-			if (current_user_can('unfiltered_html')) {
-				echo wp_kses($value, ccs_get_code_allowed_html());
-			} else {
-				echo wp_kses_post($value);
-			}
+			echo wp_kses($value, ccs_get_code_allowed_html());
 			break;
 
 		default:
