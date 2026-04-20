@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: Служебный: Category Custom Settings 
- * Description: Adds custom settings fields for WordPress categories, supports legacy migration from old category options, and provides helper functions for frontend output.
+ * Plugin Name: Служебный: Category Custom Settings
+ * Description: Adds custom settings fields for WordPress categories and provides helper functions for frontend output.
  * Version: 1.1.0
  * Author: @big_jacky
  * Author URI: https://t.me/big_jacky
@@ -17,15 +17,9 @@ if (!defined('ABSPATH')) {
 
 final class Category_Custom_Settings_Plugin {
 
+	const VERSION      = '1.1.0';
 	const NONCE_ACTION = 'ccs_save_category_fields';
 	const NONCE_NAME   = 'ccs_category_fields_nonce';
-
-	/**
-	 * Legacy option prefix from the old snippet.
-	 *
-	 * @var string
-	 */
-	const LEGACY_OPTION_PREFIX = 'category_';
 
 	/**
 	 * All supported meta fields and their config.
@@ -147,7 +141,7 @@ final class Category_Custom_Settings_Plugin {
 			}
 		';
 
-		wp_register_style('ccs-admin-inline', false);
+		wp_register_style('ccs-admin-inline', false, array(), self::VERSION);
 		wp_enqueue_style('ccs-admin-inline');
 		wp_add_inline_style('ccs-admin-inline', $css);
 	}
@@ -163,9 +157,6 @@ final class Category_Custom_Settings_Plugin {
 
 		$term_id   = (int) $term->term_id;
 		$is_parent = ((int) $term->parent === 0);
-
-		// Automatic legacy migration before rendering fields.
-		$this->maybe_migrate_legacy_data($term_id);
 
 		wp_nonce_field(self::NONCE_ACTION, self::NONCE_NAME);
 
@@ -305,6 +296,7 @@ final class Category_Custom_Settings_Plugin {
 		}
 
 		$is_parent = ((int) $term->parent === 0);
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each field is sanitized individually via sanitize_field_value() below.
 		$raw       = wp_unslash($_POST['ccs_fields']);
 		$fields    = $this->get_fields_config();
 
@@ -363,124 +355,65 @@ final class Category_Custom_Settings_Plugin {
 	 * @return string
 	 */
 	private function sanitize_custom_code($value) {
-		$value = trim($value);
-
-		$allowed_html = wp_kses_allowed_html('post');
-
-		$allowed_html['ins'] = array(
-			'class'                     => true,
-			'style'                     => true,
-			'data-ad-client'            => true,
-			'data-ad-slot'              => true,
-			'data-ad-format'            => true,
-			'data-full-width-responsive'=> true,
-		);
-
-		$allowed_html['script'] = array(
-			'async'       => true,
-			'src'         => true,
-			'crossorigin' => true,
-		);
-
-		$allowed_html['iframe'] = array(
-			'src'             => true,
-			'width'           => true,
-			'height'          => true,
-			'frameborder'     => true,
-			'allow'           => true,
-			'allowfullscreen' => true,
-			'loading'         => true,
-			'referrerpolicy'  => true,
-		);
-
-		$allowed_html['div'] = array_merge(
-			isset($allowed_html['div']) ? $allowed_html['div'] : array(),
-			array(
-				'class' => true,
-				'id'    => true,
-				'style' => true,
-			)
-		);
-
-		$allowed_html['a'] = array_merge(
-			isset($allowed_html['a']) ? $allowed_html['a'] : array(),
-			array(
-				'target' => true,
-				'rel'    => true,
-			)
-		);
-
-		return wp_kses($value, $allowed_html);
-	}
-
-	/**
-	 * Try to migrate legacy data from option category_{ID} to term meta.
-	 * Runs safely and only fills missing term_meta fields.
-	 *
-	 * @param int $term_id Category term ID.
-	 * @return void
-	 */
-	private function maybe_migrate_legacy_data($term_id) {
-		$term_id = (int) $term_id;
-		if ($term_id <= 0) {
-			return;
-		}
-
-		$legacy_option_name = self::LEGACY_OPTION_PREFIX . $term_id;
-		$legacy_data        = get_option($legacy_option_name);
-
-		if (!is_array($legacy_data) || empty($legacy_data)) {
-			return;
-		}
-
-		$term = get_term($term_id, 'category');
-		if (!$term || is_wp_error($term)) {
-			return;
-		}
-
-		$is_parent = ((int) $term->parent === 0);
-		$fields    = $this->get_fields_config();
-
-		foreach ($fields as $meta_key => $config) {
-			if (!$is_parent && empty($config['allowed_for_child'])) {
-				continue;
-			}
-
-			$current_value = get_term_meta($term_id, $meta_key, true);
-			if ($current_value !== '' && $current_value !== null) {
-				continue;
-			}
-
-			if (!array_key_exists($meta_key, $legacy_data)) {
-				continue;
-			}
-
-			$legacy_value = $legacy_data[$meta_key];
-
-			if (!is_string($legacy_value) || $legacy_value === '') {
-				continue;
-			}
-
-			$legacy_value = wp_unslash($legacy_value);
-
-			/**
-			 * Old snippet stored some fields with slashes and some with HTML entities.
-			 * Here we normalize gently.
-			 */
-			if ($meta_key === 'cat_add_description') {
-				$legacy_value = htmlspecialchars_decode($legacy_value, ENT_QUOTES);
-			}
-
-			$sanitized_value = $this->sanitize_field_value($legacy_value, $config['type']);
-
-			if ($sanitized_value !== '') {
-				update_term_meta($term_id, $meta_key, $sanitized_value);
-			}
-		}
+		return wp_kses(trim($value), ccs_get_code_allowed_html());
 	}
 }
 
 new Category_Custom_Settings_Plugin();
+
+/**
+ * Returns the allowed HTML tags and attributes for code/banner fields.
+ *
+ * @return array
+ */
+function ccs_get_code_allowed_html() {
+	$allowed_html = wp_kses_allowed_html('post');
+
+	$allowed_html['ins'] = array(
+		'class'                      => true,
+		'style'                      => true,
+		'data-ad-client'             => true,
+		'data-ad-slot'               => true,
+		'data-ad-format'             => true,
+		'data-full-width-responsive' => true,
+	);
+
+	$allowed_html['script'] = array(
+		'async'       => true,
+		'src'         => true,
+		'crossorigin' => true,
+	);
+
+	$allowed_html['iframe'] = array(
+		'src'             => true,
+		'width'           => true,
+		'height'          => true,
+		'frameborder'     => true,
+		'allow'           => true,
+		'allowfullscreen' => true,
+		'loading'         => true,
+		'referrerpolicy'  => true,
+	);
+
+	$allowed_html['div'] = array_merge(
+		isset($allowed_html['div']) ? $allowed_html['div'] : array(),
+		array(
+			'class' => true,
+			'id'    => true,
+			'style' => true,
+		)
+	);
+
+	$allowed_html['a'] = array_merge(
+		isset($allowed_html['a']) ? $allowed_html['a'] : array(),
+		array(
+			'target' => true,
+			'rel'    => true,
+		)
+	);
+
+	return $allowed_html;
+}
 
 /**
  * Get category custom field value.
@@ -511,21 +444,6 @@ function ccs_get_category_field($field_name, $term_id = null) {
 	}
 
 	$value = get_term_meta($term_id, $field_name, true);
-
-	/**
-	 * Fallback for legacy data if migration has not happened yet,
-	 * e.g. field is requested on frontend before category edit screen was opened.
-	 */
-	if (($value === '' || $value === null) && $term_id > 0) {
-		$legacy_data = get_option('category_' . $term_id);
-		if (is_array($legacy_data) && isset($legacy_data[$field_name]) && is_string($legacy_data[$field_name])) {
-			$value = wp_unslash($legacy_data[$field_name]);
-
-			if ($field_name === 'cat_add_description') {
-				$value = htmlspecialchars_decode($value, ENT_QUOTES);
-			}
-		}
-	}
 
 	return is_string($value) ? $value : '';
 }
@@ -558,7 +476,7 @@ function ccs_the_category_field($field_name, $term_id = null) {
 		case 'cat_adsense1':
 		case 'cat_headerbanner':
 			if (current_user_can('unfiltered_html')) {
-				echo $value;
+				echo wp_kses($value, ccs_get_code_allowed_html());
 			} else {
 				echo wp_kses_post($value);
 			}
