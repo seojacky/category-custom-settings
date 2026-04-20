@@ -3,7 +3,7 @@ Contributors: seojacky
 Tags: category, custom fields, term meta, taxonomy
 Requires at least: 5.6
 Tested up to: 6.7
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -56,6 +56,17 @@ Use `ccs_get_category_field( 'field_name' )` to retrieve the value, or `ccs_the_
 `cat_adsense1` and `cat_headerbanner` are restricted to users who have the `unfiltered_html` capability (administrators on single-site installations). The values are stored and output through `wp_kses()` with an extended allowlist that includes `<script>`, `<iframe>`, and `<ins>` tags.
 
 == Changelog ==
+
+= 1.3.0 =
+* Fixed: `ccs_the_category_field()` — code/banner fields (`cat_adsense1`, `cat_headerbanner`) were not shown to frontend visitors because of an incorrect `current_user_can('unfiltered_html')` check on output; data is already sanitized on save.
+* Performance: added `get_term_meta( $term_id )` cache primer in `render_edit_fields()` — reduces 9 separate DB queries to 1.
+* Performance: `ccs_get_code_allowed_html()` now uses a `static` cache to avoid rebuilding the allowed-HTML array on every call.
+* Performance: `get_fields_config()` now uses a `static` cache.
+* Standards: added `Text Domain: category-custom-settings` to plugin header.
+* Standards: all admin UI strings wrapped in `esc_html_e()` for i18n readiness.
+* Standards: added `load_textdomain()` method hooked on `init`.
+* Standards: removed deprecated `valign="top"` HTML attributes from form rows.
+* Standards: plugin class instantiated on `plugins_loaded` hook instead of bare file scope.
 
 = 1.2.0 =
 * Fixed PHPCS: output of code/banner fields now uses `wp_kses()` with an explicit allowlist instead of bare `echo`.
