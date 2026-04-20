@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Category Custom Settings
  * Plugin URI: https://example.com/
- * Description: Adds custom settings fields for WordPress categories and provides helper functions for frontend output.
- * Version: 1.0.0
+ * Description: Adds custom settings fields for WordPress categories, supports legacy migration from old category options, and provides helper functions for frontend output.
+ * Version: 1.1.0
  * Author: OpenAI
  * License: GPL2+
  * Text Domain: category-custom-settings
@@ -18,10 +18,62 @@ final class Category_Custom_Settings_Plugin {
 	const NONCE_ACTION = 'ccs_save_category_fields';
 	const NONCE_NAME   = 'ccs_category_fields_nonce';
 
+	/**
+	 * Legacy option prefix from the old snippet.
+	 *
+	 * @var string
+	 */
+	const LEGACY_OPTION_PREFIX = 'category_';
+
+	/**
+	 * All supported meta fields and their config.
+	 *
+	 * @return array
+	 */
+	private function get_fields_config() {
+		return array(
+			'cat_add_description' => array(
+				'type'              => 'html_limited',
+				'allowed_for_child' => true,
+			),
+			'cat_version' => array(
+				'type'              => 'text',
+				'allowed_for_child' => false,
+			),
+			'cat_video' => array(
+				'type'              => 'text',
+				'allowed_for_child' => false,
+			),
+			'bg_category' => array(
+				'type'              => 'text',
+				'allowed_for_child' => false,
+			),
+			'cat_rss' => array(
+				'type'              => 'url',
+				'allowed_for_child' => false,
+			),
+			'cat_leftlink' => array(
+				'type'              => 'url',
+				'allowed_for_child' => false,
+			),
+			'cat_rightlink' => array(
+				'type'              => 'url',
+				'allowed_for_child' => false,
+			),
+			'cat_adsense1' => array(
+				'type'              => 'code',
+				'allowed_for_child' => false,
+			),
+			'cat_headerbanner' => array(
+				'type'              => 'code',
+				'allowed_for_child' => false,
+			),
+		);
+	}
+
 	public function __construct() {
 		add_action('category_edit_form_fields', array($this, 'render_edit_fields'));
 		add_action('edited_category', array($this, 'save_fields'));
-
 		add_action('admin_enqueue_scripts', array($this, 'admin_assets'));
 	}
 
@@ -107,8 +159,11 @@ final class Category_Custom_Settings_Plugin {
 			return;
 		}
 
-		$term_id = (int) $term->term_id;
+		$term_id   = (int) $term->term_id;
 		$is_parent = ((int) $term->parent === 0);
+
+		// Automatic legacy migration before rendering fields.
+		$this->maybe_migrate_legacy_data($term_id);
 
 		wp_nonce_field(self::NONCE_ACTION, self::NONCE_NAME);
 
@@ -228,7 +283,13 @@ final class Category_Custom_Settings_Plugin {
 			return;
 		}
 
-		if (!isset($_POST[self::NONCE_NAME]) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST[self::NONCE_NAME])), self::NONCE_ACTION)) {
+		if (
+			!isset($_POST[self::NONCE_NAME]) ||
+			!wp_verify_nonce(
+				sanitize_text_field(wp_unslash($_POST[self::NONCE_NAME])),
+				self::NONCE_ACTION
+			)
+		) {
 			return;
 		}
 
@@ -242,46 +303,8 @@ final class Category_Custom_Settings_Plugin {
 		}
 
 		$is_parent = ((int) $term->parent === 0);
-		$raw = wp_unslash($_POST['ccs_fields']);
-
-		$fields = array(
-			'cat_add_description' => array(
-				'type' => 'html_limited',
-				'allowed_for_child' => true,
-			),
-			'cat_version' => array(
-				'type' => 'text',
-				'allowed_for_child' => false,
-			),
-			'cat_video' => array(
-				'type' => 'text',
-				'allowed_for_child' => false,
-			),
-			'bg_category' => array(
-				'type' => 'text',
-				'allowed_for_child' => false,
-			),
-			'cat_rss' => array(
-				'type' => 'url',
-				'allowed_for_child' => false,
-			),
-			'cat_leftlink' => array(
-				'type' => 'url',
-				'allowed_for_child' => false,
-			),
-			'cat_rightlink' => array(
-				'type' => 'url',
-				'allowed_for_child' => false,
-			),
-			'cat_adsense1' => array(
-				'type' => 'code',
-				'allowed_for_child' => false,
-			),
-			'cat_headerbanner' => array(
-				'type' => 'code',
-				'allowed_for_child' => false,
-			),
-		);
+		$raw       = wp_unslash($_POST['ccs_fields']);
+		$fields    = $this->get_fields_config();
 
 		foreach ($fields as $meta_key => $config) {
 			if (!$is_parent && empty($config['allowed_for_child'])) {
@@ -290,29 +313,7 @@ final class Category_Custom_Settings_Plugin {
 			}
 
 			$value = isset($raw[$meta_key]) ? $raw[$meta_key] : '';
-
-			switch ($config['type']) {
-				case 'html_limited':
-					$value = wp_kses_post($value);
-					break;
-
-				case 'url':
-					$value = esc_url_raw(trim($value));
-					break;
-
-				case 'code':
-					if (current_user_can('unfiltered_html')) {
-						$value = $this->sanitize_custom_code($value);
-					} else {
-						$value = '';
-					}
-					break;
-
-				case 'text':
-				default:
-					$value = sanitize_text_field($value);
-					break;
-			}
+			$value = $this->sanitize_field_value($value, $config['type']);
 
 			if ($value === '') {
 				delete_term_meta($term_id, $meta_key);
@@ -322,27 +323,60 @@ final class Category_Custom_Settings_Plugin {
 		}
 	}
 
-	private function sanitize_custom_code($value) {
+	/**
+	 * Sanitize value according to field type.
+	 *
+	 * @param mixed  $value Raw value.
+	 * @param string $type  Field type.
+	 * @return string
+	 */
+	private function sanitize_field_value($value, $type) {
 		if (!is_string($value)) {
 			return '';
 		}
 
+		switch ($type) {
+			case 'html_limited':
+				return wp_kses_post($value);
+
+			case 'url':
+				return esc_url_raw(trim($value));
+
+			case 'code':
+				if (current_user_can('unfiltered_html')) {
+					return $this->sanitize_custom_code($value);
+				}
+				return '';
+
+			case 'text':
+			default:
+				return sanitize_text_field($value);
+		}
+	}
+
+	/**
+	 * Sanitize trusted custom code fields.
+	 *
+	 * @param string $value Raw HTML/JS code.
+	 * @return string
+	 */
+	private function sanitize_custom_code($value) {
 		$value = trim($value);
 
 		$allowed_html = wp_kses_allowed_html('post');
 
 		$allowed_html['ins'] = array(
-			'class'        => true,
-			'style'        => true,
-			'data-ad-client' => true,
-			'data-ad-slot'   => true,
-			'data-ad-format' => true,
-			'data-full-width-responsive' => true,
+			'class'                     => true,
+			'style'                     => true,
+			'data-ad-client'            => true,
+			'data-ad-slot'              => true,
+			'data-ad-format'            => true,
+			'data-full-width-responsive'=> true,
 		);
 
 		$allowed_html['script'] = array(
-			'async' => true,
-			'src'   => true,
+			'async'       => true,
+			'src'         => true,
 			'crossorigin' => true,
 		);
 
@@ -363,7 +397,6 @@ final class Category_Custom_Settings_Plugin {
 				'class' => true,
 				'id'    => true,
 				'style' => true,
-				'data-*' => true,
 			)
 		);
 
@@ -376,6 +409,72 @@ final class Category_Custom_Settings_Plugin {
 		);
 
 		return wp_kses($value, $allowed_html);
+	}
+
+	/**
+	 * Try to migrate legacy data from option category_{ID} to term meta.
+	 * Runs safely and only fills missing term_meta fields.
+	 *
+	 * @param int $term_id Category term ID.
+	 * @return void
+	 */
+	private function maybe_migrate_legacy_data($term_id) {
+		$term_id = (int) $term_id;
+		if ($term_id <= 0) {
+			return;
+		}
+
+		$legacy_option_name = self::LEGACY_OPTION_PREFIX . $term_id;
+		$legacy_data        = get_option($legacy_option_name);
+
+		if (!is_array($legacy_data) || empty($legacy_data)) {
+			return;
+		}
+
+		$term = get_term($term_id, 'category');
+		if (!$term || is_wp_error($term)) {
+			return;
+		}
+
+		$is_parent = ((int) $term->parent === 0);
+		$fields    = $this->get_fields_config();
+
+		foreach ($fields as $meta_key => $config) {
+			if (!$is_parent && empty($config['allowed_for_child'])) {
+				continue;
+			}
+
+			$current_value = get_term_meta($term_id, $meta_key, true);
+			if ($current_value !== '' && $current_value !== null) {
+				continue;
+			}
+
+			if (!array_key_exists($meta_key, $legacy_data)) {
+				continue;
+			}
+
+			$legacy_value = $legacy_data[$meta_key];
+
+			if (!is_string($legacy_value) || $legacy_value === '') {
+				continue;
+			}
+
+			$legacy_value = wp_unslash($legacy_value);
+
+			/**
+			 * Old snippet stored some fields with slashes and some with HTML entities.
+			 * Here we normalize gently.
+			 */
+			if ($meta_key === 'cat_add_description') {
+				$legacy_value = htmlspecialchars_decode($legacy_value, ENT_QUOTES);
+			}
+
+			$sanitized_value = $this->sanitize_field_value($legacy_value, $config['type']);
+
+			if ($sanitized_value !== '') {
+				update_term_meta($term_id, $meta_key, $sanitized_value);
+			}
+		}
 	}
 }
 
@@ -395,7 +494,13 @@ function ccs_get_category_field($field_name, $term_id = null) {
 
 	if ($term_id === null) {
 		$term = get_queried_object();
-		if (!$term || is_wp_error($term) || empty($term->term_id) || empty($term->taxonomy) || $term->taxonomy !== 'category') {
+		if (
+			!$term ||
+			is_wp_error($term) ||
+			empty($term->term_id) ||
+			empty($term->taxonomy) ||
+			$term->taxonomy !== 'category'
+		) {
 			return '';
 		}
 		$term_id = (int) $term->term_id;
@@ -403,7 +508,24 @@ function ccs_get_category_field($field_name, $term_id = null) {
 		$term_id = (int) $term_id;
 	}
 
-	return (string) get_term_meta($term_id, $field_name, true);
+	$value = get_term_meta($term_id, $field_name, true);
+
+	/**
+	 * Fallback for legacy data if migration has not happened yet,
+	 * e.g. field is requested on frontend before category edit screen was opened.
+	 */
+	if (($value === '' || $value === null) && $term_id > 0) {
+		$legacy_data = get_option('category_' . $term_id);
+		if (is_array($legacy_data) && isset($legacy_data[$field_name]) && is_string($legacy_data[$field_name])) {
+			$value = wp_unslash($legacy_data[$field_name]);
+
+			if ($field_name === 'cat_add_description') {
+				$value = htmlspecialchars_decode($value, ENT_QUOTES);
+			}
+		}
+	}
+
+	return is_string($value) ? $value : '';
 }
 
 /**
