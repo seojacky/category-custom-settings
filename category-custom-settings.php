@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Category Custom Settings 
+ * Plugin Name: Служебный: Category Custom Settings 
  * Description: Adds custom settings fields for WordPress categories, supports legacy migration from old category options, and provides helper functions for frontend output.
  * Version: 1.1.0
  * Author: @big_jacky
